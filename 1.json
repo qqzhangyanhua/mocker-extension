@@ -1,0 +1,16 @@
+                                                                                   
+  [                                                                                 
+    {                                                                               
+      "name": "路径含 getListData（regex-段/末尾）",                                
+      "description": "仅在路径部分命中 /getListData，避免 query/hash",              
+      "enabled": true,                                                              
+      "url": "\\/getListData(?=[/?#]|$)",                                           
+      "matchType": "regex",                                                         
+      "method": "ALL",                                                              
+      "statusCode": 200,                                                            
+      "delay": 0,                                                                   
+      "responseType": "json",                                                       
+      "responseBody": "{\"code\":200,\"data\":\"ok\"}",                             
+      "usageCount": 0                                                               
+    }                                                                               
+  ]  

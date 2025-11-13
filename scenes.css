@@ -1,0 +1,91 @@
+/* 场景管理页面样式 */
+
+.active-scene {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+}
+
+.active-scene:hover {
+  border-color: #40a9ff !important;
+}
+
+/* 场景卡片样式 */
+.ant-card {
+  transition: all 0.3s ease;
+}
+
+.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 场景标签 */
+.scene-tag {
+  margin-left: 8px;
+}
+
+/* 场景统计 */
+.scene-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 场景操作按钮 */
+.scene-actions {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.ant-card:hover .scene-actions {
+  opacity: 1;
+}
+
+/* 空状态样式 */
+.empty-scene {
+  text-align: center;
+  padding: 48px;
+  background: #fafafa;
+  border-radius: 8px;
+  margin-top: 24px;
+}
+
+/* 场景规则配置 */
+.scene-rules-config {
+  margin-top: 16px;
+}
+
+.scene-rule-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+.scene-rule-item:hover {
+  background: #f5f5f5;
+}
+
+/* 场景切换动画 */
+@keyframes scene-switch {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.scene-switching {
+  animation: scene-switch 0.3s ease;
+}

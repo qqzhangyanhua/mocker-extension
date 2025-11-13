@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm add:*)",
+      "Bash(tree:*)",
+      "Bash(pnpm dev)",
+      "Bash(pnpm rebuild:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(pnpm config set:*)",
+      "Bash(node install/libvips:*)",
+      "Bash(node install/dll-copy:*)",
+      "Bash(npx prebuild-install)",
+      "Bash(node scripts/generate-icons.js:*)",
+      "Bash(taskkill:*)",
+      "Bash(nul)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(pnpm build:*)",
+      "Bash(move monitor.tsx tabsmonitor.tsx)",
+      "Bash(mv:*)",
+      "Bash(node test-regex.js:*)",
+      "Bash(node test-match.js:*)",
+      "Bash(del /F D:AIgoogle-searchcomponentsMonacoConfig.tsx D:AIgoogle-searchlibmonaco-loader.ts)",
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(del /F nul)",
+      "Bash(rm:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,54 @@
+[
+  {
+    "name": "路径含 getListData（regex-段/末尾）",
+    "description": "匹配所有以 /getListData 结尾的URL路径",
+    "enabled": true,
+    "url": "\\/getListData(?=[/?#]|$)",
+    "matchType": "regex",
+    "method": "ALL",
+    "statusCode": 200,
+    "delay": 0,
+    "responseType": "json",
+    "responseBody": "{\"code\":200,\"data\":\"ok\"}",
+    "usageCount": 0
+  },
+  {
+    "name": "精确匹配PMS接口",
+    "description": "精确匹配 https://pms.tongbaninfo.com:8888/app/api/standardList/front/getListData",
+    "enabled": true,
+    "url": "https://pms.tongbaninfo.com:8888/app/api/standardList/front/getListData",
+    "matchType": "exact",
+    "method": "POST",
+    "statusCode": 200,
+    "delay": 0,
+    "responseType": "json",
+    "responseBody": "{\"code\":200,\"data\":\"This is mocked response for PMS getListData\",\"list\":[]}",
+    "usageCount": 0
+  },
+  {
+    "name": "前缀匹配PMS域名所有API",
+    "description": "匹配所有 PMS 域名下的接口",
+    "enabled": false,
+    "url": "https://pms.tongbaninfo.com:8888/",
+    "matchType": "prefix",
+    "method": "ALL",
+    "statusCode": 200,
+    "delay": 100,
+    "responseType": "json",
+    "responseBody": "{\"code\":200,\"data\":\"Mocked PMS API response\"}",
+    "usageCount": 0
+  },
+  {
+    "name": "包含getListData的所有请求",
+    "description": "URL中包含 getListData 字符串的所有请求",
+    "enabled": false,
+    "url": "getListData",
+    "matchType": "contains",
+    "method": "ALL",
+    "statusCode": 200,
+    "delay": 0,
+    "responseType": "json",
+    "responseBody": "{\"code\":200,\"data\":\"contains getListData\"}",
+    "usageCount": 0
+  }
+]
