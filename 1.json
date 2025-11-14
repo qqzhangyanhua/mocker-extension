@@ -1,16 +1,51 @@
-                                                                                   
-  [                                                                                 
-    {                                                                               
-      "name": "路径含 getListData（regex-段/末尾）",                                
-      "description": "仅在路径部分命中 /getListData，避免 query/hash",              
-      "enabled": true,                                                              
-      "url": "\\/getListData(?=[/?#]|$)",                                           
-      "matchType": "regex",                                                         
-      "method": "ALL",                                                              
-      "statusCode": 200,                                                            
-      "delay": 0,                                                                   
-      "responseType": "json",                                                       
-      "responseBody": "{\"code\":200,\"data\":\"ok\"}",                             
-      "usageCount": 0                                                               
-    }                                                                               
-  ]  
+{
+  "code": 200,
+  "requestTime": null,
+  "appName": null,
+  "msg": "服务器成功返回请求的数据",
+  "subCode": null,
+  "subMsg": null,
+  "subMsgType": "success",
+  "data": {
+    "body": [
+      {
+        "id": "KQM2253770",
+        "data": {
+          "KQM18275": {
+            "text": "2024-11-01 16:05:11",
+            "value": "2024-11-01 16:05:11"
+          },
+          "KQM18274": { "text": "KQM2253770", "value": "KQM2253770" },
+          "KQM18950": { "text": "公司管理层", "value": "KQM2253762" },
+          "KQM18301": { "text": null, "value": true },
+          "KQM18323": { "text": "运营管理系统", "value": "HW44" },
+          "KQM1801:KQM18326": { "text": "总经理", "value": "总经理" },
+          "KQM18303": {
+            "text": "上海通办信息服务有限公司",
+            "value": "KQM2259052"
+          },
+          "id": { "text": "", "value": "KQM2253770" },
+          "KQM18326": { "text": "总经理", "value": "总经理" },
+          "isLeaf": { "text": null, "value": true }
+        },
+        "children": null
+      }
+    ],
+    "pagination": {
+      "current": 1,
+      "pageSize": 15,
+      "total": 9,
+      "pages": 1,
+      "hasMorePage": false,
+      "dimTotal": "9"
+    },
+    "viewId": null,
+    "viewName": null,
+    "filterBoxData": null,
+    "columnFilterBoxData": null,
+    "buttonMap": null,
+    "listShowModel": "list"
+  },
+  "tid": null,
+  "originalTid": null
+}

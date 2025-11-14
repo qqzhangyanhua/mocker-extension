@@ -1,26 +1,72 @@
 import type { MockRule, MatchType, HttpMethod } from './types';
 
 /**
+ * 规范化 URL：提取路径部分用于匹配
+ * 支持完整 URL 和相对路径
+ */
+function normalizeUrl(url: string): string {
+  // 如果是完整 URL，提取 pathname + search + hash
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.pathname + urlObj.search + urlObj.hash;
+    } catch (e) {
+      return url;
+    }
+  }
+  // 如果是相对路径，直接返回
+  return url;
+}
+
+/**
  * 判断URL是否匹配规则
+ * 支持完整 URL 和相对路径的智能匹配
  */
 function matchUrl(url: string, pattern: string, matchType: MatchType): boolean {
+  // 规范化请求 URL（提取路径部分）
+  const normalizedUrl = normalizeUrl(url);
+  
+  console.log('[Matcher] 🔍 开始匹配测试')
+  console.log('[Matcher]    ├─ 请求 URL:', url)
+  console.log('[Matcher]    ├─ 规范化 URL:', normalizedUrl)
+  console.log('[Matcher]    ├─ 匹配模式:', pattern)
+  console.log('[Matcher]    └─ 匹配类型:', matchType)
+  
   switch (matchType) {
     case 'exact':
-      return url === pattern;
+      // 精确匹配：支持完整 URL 或路径匹配
+      if (url === pattern) return true;
+      if (normalizedUrl === pattern) return true;
+      // 如果 pattern 是完整 URL，也尝试规范化后匹配
+      const normalizedPattern = normalizeUrl(pattern);
+      return normalizedUrl === normalizedPattern;
 
     case 'prefix':
-      return url.startsWith(pattern.replace(/\*$/, ''));
+      const prefixPattern = pattern.replace(/\*$/, '');
+      // 尝试原始 URL 和规范化 URL
+      if (url.startsWith(prefixPattern)) return true;
+      if (normalizedUrl.startsWith(prefixPattern)) return true;
+      const normalizedPrefixPattern = normalizeUrl(prefixPattern);
+      return normalizedUrl.startsWith(normalizedPrefixPattern);
 
     case 'contains':
       const cleanPattern = pattern.replace(/^\*+|\*+$/g, '');
-      return url.includes(cleanPattern);
+      const urlContains = url.includes(cleanPattern);
+      const normalizedContains = normalizedUrl.includes(cleanPattern);
+      const result = urlContains || normalizedContains;
+      console.log('[Matcher]    ├─ 清理后模式:', cleanPattern);
+      console.log('[Matcher]    ├─ 原始URL匹配:', urlContains);
+      console.log('[Matcher]    ├─ 规范URL匹配:', normalizedContains);
+      console.log('[Matcher]    └─ 最终结果:', result ? '✅ 匹配' : '❌ 不匹配');
+      return result;
 
     case 'regex':
       try {
         const regex = new RegExp(pattern);
-        return regex.test(url);
+        // 同时测试原始 URL 和规范化 URL
+        return regex.test(url) || regex.test(normalizedUrl);
       } catch (e) {
-        console.error('Invalid regex pattern:', pattern, e);
+        console.error('[Matcher] Invalid regex pattern:', pattern, e);
         return false;
       }
 

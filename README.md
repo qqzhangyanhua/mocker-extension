@@ -298,6 +298,428 @@ api-mocker-extension/
 
 ---
 
+## 🔌 使用的 API
+
+本扩展综合运用了多种 Chrome Extension API 和 Web API 来实现强大的请求拦截和模拟功能。
+
+### Chrome Extension APIs
+
+#### 1. Storage API (`chrome.storage.local`)
+
+用于本地数据持久化，存储所有扩展配置和数据。
+
+**使用场景**：
+- 保存 Mock 规则列表 (`mock_rules`)
+- 保存场景配置 (`mock_scenes`)
+- 保存全局配置 (`mock_config`)：开关状态、拦截模式、最大记录数等
+- 保存请求记录 (`mock_records`)
+
+**核心方法**：
+```typescript
+chrome.storage.local.get()      // 读取数据
+chrome.storage.local.set()      // 写入数据
+chrome.storage.local.clear()    // 清空数据
+chrome.storage.onChanged         // 监听数据变化
+```
+
+**特点**：
+- ✅ 所有数据仅存储在本地，不上传到云端
+- ✅ 配额大（约 10MB），足够存储大量规则
+- ✅ 支持跨页面同步数据
+
+**实现位置**：`lib/storage.ts`
+
+---
+
+#### 2. Runtime API (`chrome.runtime`)
+
+用于扩展内部消息传递和生命周期管理。
+
+**使用场景**：
+- 内容脚本与后台服务之间的通信
+- 页面加载时同步配置
+- 处理扩展安装和更新事件
+
+**核心方法**：
+```typescript
+chrome.runtime.sendMessage()         // 发送消息
+chrome.runtime.onMessage            // 接收消息
+chrome.runtime.onInstalled          // 安装/更新事件
+chrome.runtime.onStartup            // 浏览器启动事件
+chrome.runtime.getURL()             // 获取扩展资源 URL
+```
+
+**消息类型**：
+- `GET_CONFIG` - 获取当前配置和规则
+- `ADD_REQUEST_RECORD` - 添加请求记录
+- `BROADCAST_CONFIG` - 广播配置更新
+- `UPDATE_CONFIG` - 更新配置
+
+**实现位置**：`background.ts`、`contents/interceptor.ts`
+
+---
+
+#### 3. Tabs API (`chrome.tabs`)
+
+用于管理和操作浏览器标签页。
+
+**使用场景**：
+- 向所有打开的标签页广播配置更新
+- 检测标签页加载状态，及时注入配置
+- 创建新标签页（如欢迎页面）
+
+**核心方法**：
+```typescript
+chrome.tabs.query()              // 查询标签页列表
+chrome.tabs.sendMessage()        // 向指定标签页发送消息
+chrome.tabs.onUpdated            // 监听标签页更新
+chrome.tabs.create()             // 创建新标签页
+```
+
+**实现位置**：`background.ts`
+
+---
+
+#### 4. Action API (`chrome.action`)
+
+用于管理扩展图标、徽章和工具提示。
+
+**使用场景**：
+- 显示扩展开关状态
+- 显示当前启用的规则数量
+- 显示当前拦截模式
+
+**核心方法**：
+```typescript
+chrome.action.setBadgeText()             // 设置徽章文字
+chrome.action.setBadgeBackgroundColor()  // 设置徽章颜色
+chrome.action.setTitle()                 // 设置悬停提示
+```
+
+**状态指示**：
+- 🟢 绿色徽章 + 规则数量：扩展已开启
+- ⚪ 灰色 "OFF"：扩展已关闭
+
+**实现位置**：`background.ts`
+
+---
+
+#### 5. WebRequest API (`chrome.webRequest`)
+
+用于网络拦截模式，在网络层面拦截和重定向请求。
+
+**使用场景**：
+- 网络拦截模式下拦截 HTTP 请求
+- 将匹配的请求重定向到 Data URL
+- 记录拦截的请求信息
+
+**核心方法**：
+```typescript
+chrome.webRequest.onBeforeRequest.addListener()     // 添加拦截监听器
+chrome.webRequest.onBeforeRequest.removeListener()  // 移除监听器
+chrome.webRequest.onBeforeRequest.hasListener()     // 检查监听器状态
+```
+
+**拦截方式**：
+- 使用 `redirectUrl` 将请求重定向到包含 Mock 数据的 Data URL
+- 使用 `blocking` 模式同步处理请求
+
+**限制**：
+- ⚠️ 无法完全控制响应状态码和响应头
+- ⚠️ POST 请求会被转换为 GET 请求
+
+**实现位置**：`lib/net-intercept.ts`
+
+---
+
+#### 6. Content Scripts API
+
+用于向页面注入脚本，实现页面环境中的请求拦截。
+
+**配置**：
+```typescript
+export const config: PlasmoCSConfig = {
+  matches: ["<all_urls>"],      // 所有网站
+  all_frames: true,             // 包括 iframe
+  run_at: "document_start"      // 最早执行时机
+}
+```
+
+**特点**：
+- ✅ 在页面加载前注入，确保拦截所有请求
+- ✅ 可访问页面 DOM 和 Chrome APIs
+- ✅ 通过 `window.postMessage` 与页面脚本通信
+
+**实现位置**：`contents/interceptor.ts`
+
+---
+
+### Web APIs
+
+#### 1. Fetch API
+
+覆盖原生 `window.fetch` 方法来拦截 Fetch 请求。
+
+**拦截原理**：
+```typescript
+const originalFetch = window.fetch;
+window.fetch = async function(input, init) {
+  // 1. 查询匹配的 Mock 规则
+  const rule = await askRule(url, method);
+  
+  // 2. 如果有规则，返回 Mock 响应
+  if (rule) {
+    return new Response(rule.responseBody, {
+      status: rule.statusCode,
+      headers: rule.responseHeaders
+    });
+  }
+  
+  // 3. 否则执行真实请求
+  return originalFetch.call(window, input, init);
+};
+```
+
+**优势**：
+- ✅ 完全控制响应内容、状态码和响应头
+- ✅ 支持自定义延迟
+- ✅ 不受 CORS 限制
+
+**实现位置**：`static/inject.js`
+
+---
+
+#### 2. XMLHttpRequest API
+
+覆盖原生 `XMLHttpRequest` 构造函数来拦截 XHR 请求。
+
+**拦截原理**：
+```typescript
+const OriginalXHR = window.XMLHttpRequest;
+window.XMLHttpRequest = function() {
+  const xhr = new OriginalXHR();
+  
+  // Hook xhr.open() 记录 URL 和方法
+  const originalOpen = xhr.open;
+  xhr.open = function(method, url, ...) {
+    // 记录请求信息
+  };
+  
+  // Hook xhr.send() 执行拦截逻辑
+  const originalSend = xhr.send;
+  xhr.send = function(body) {
+    // 查询规则，如果匹配则模拟响应
+    const rule = await askRule(url, method);
+    if (rule) {
+      // 手动设置 xhr 属性和触发事件
+      Object.defineProperty(xhr, 'status', { value: rule.statusCode });
+      xhr.dispatchEvent(new Event('load'));
+    } else {
+      // 执行真实请求
+      originalSend.call(xhr, body);
+    }
+  };
+  
+  return xhr;
+};
+```
+
+**挑战**：
+- 需要完整模拟 XHR 的所有属性和事件
+- 包括：`readyState`、`status`、`responseText`、`load`、`readystatechange` 等
+
+**实现位置**：`static/inject.js`
+
+---
+
+#### 3. PostMessage API
+
+用于内容脚本与页面脚本之间的双向通信。
+
+**通信流程**：
+```
+页面脚本 (inject.js)
+  ↓ postMessage: API_MOCKER_REQUEST
+内容脚本 (interceptor.ts)
+  ↓ sendMessage: GET_CONFIG
+后台服务 (background.ts)
+  ↓ 查找匹配规则
+内容脚本 (interceptor.ts)
+  ↓ postMessage: API_MOCKER_RESPONSE
+页面脚本 (inject.js)
+  ↓ 返回 Mock 数据
+```
+
+**消息类型**：
+- `API_MOCKER_REQUEST` - 请求查询匹配规则
+- `API_MOCKER_RESPONSE` - 返回匹配结果
+- `API_MOCKER_RECORD` - 记录请求日志
+- `API_MOCKER_SET_MODE` - 同步配置和模式
+
+**优势**：
+- ✅ 绕过内容脚本和页面脚本的隔离限制
+- ✅ 实现页面环境和扩展环境的数据交换
+
+**实现位置**：`static/inject.js`、`contents/interceptor.ts`
+
+---
+
+### 第三方库 API
+
+#### 1. Mock.js
+
+用于生成随机的模拟数据。
+
+**使用方式**：
+在响应内容中使用 Mock.js 占位符：
+```json
+{
+  "name": "@cname",           // 随机中文名
+  "email": "@email",          // 随机邮箱
+  "age": "@integer(18, 60)",  // 随机整数
+  "avatar": "@image('200x200')", // 随机图片
+  "address": "@city(true)"    // 随机城市
+}
+```
+
+扩展会在返回响应前自动解析 Mock.js 语法。
+
+**文档**：[Mock.js 语法规范](http://mockjs.com/examples.html)
+
+---
+
+#### 2. Monaco Editor API
+
+提供强大的代码编辑能力。
+
+**功能**：
+- JSON 语法高亮和格式化
+- 自动补全和错误提示
+- 代码折叠和搜索
+- 与 VS Code 一致的编辑体验
+
+**集成方式**：使用 `@monaco-editor/react` 包装器
+
+**实现位置**：`components/JsonEditor.tsx`
+
+---
+
+#### 3. Ant Design API
+
+提供丰富的 UI 组件。
+
+**主要使用的组件**：
+- `Table` - 规则列表和请求记录
+- `Form` - 规则编辑表单
+- `Modal` - 弹窗对话框
+- `Button`、`Input`、`Select` 等基础组件
+- `message` - 消息提示
+- `notification` - 通知
+
+---
+
+### API 使用架构图
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       用户界面层                              │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │  Popup   │  │ Options  │  │ Monitor  │  │  Scenes  │   │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+│       └──────────────┴─────────────┴─────────────┘          │
+│                         │                                    │
+│                    Storage API                               │
+│                         │                                    │
+└─────────────────────────┼────────────────────────────────────┘
+                          │
+┌─────────────────────────┼────────────────────────────────────┐
+│                  后台服务 (Service Worker)                    │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  Runtime API (消息处理)                      │          │
+│  │  - GET_CONFIG                                 │          │
+│  │  - ADD_REQUEST_RECORD                         │          │
+│  │  - BROADCAST_CONFIG                           │          │
+│  └──────────────────────┬───────────────────────┘          │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  Tabs API (配置广播)                         │          │
+│  │  - 向所有标签页推送配置                        │          │
+│  └──────────────────────┬───────────────────────┘          │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  WebRequest API (网络拦截模式)               │          │
+│  │  - onBeforeRequest                            │          │
+│  └───────────────────────────────────────────────┘          │
+└─────────────────────────┼────────────────────────────────────┘
+                          │
+┌─────────────────────────┼────────────────────────────────────┐
+│                   内容脚本 (Content Script)                   │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  Runtime API (与后台通信)                    │          │
+│  │  - 获取配置和规则                             │          │
+│  │  - 上报请求记录                               │          │
+│  └──────────────────────┬───────────────────────┘          │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  PostMessage API (与页面通信)                │          │
+│  │  - 接收规则查询请求                           │          │
+│  │  - 返回匹配结果                               │          │
+│  └───────────────────────────────────────────────┘          │
+└─────────────────────────┼────────────────────────────────────┘
+                          │
+┌─────────────────────────┼────────────────────────────────────┐
+│                   页面脚本 (Inject Script)                    │
+│                         │                                    │
+│  ┌──────────────────────┴───────────────────────┐          │
+│  │  Fetch API Hook                               │          │
+│  │  - 拦截 fetch 请求                            │          │
+│  │  - 返回 Mock 响应                             │          │
+│  └───────────────────────────────────────────────┘          │
+│                                                              │
+│  ┌───────────────────────────────────────────────┐         │
+│  │  XMLHttpRequest API Hook                      │         │
+│  │  - 拦截 XHR 请求                              │         │
+│  │  - 模拟 XHR 响应                              │         │
+│  └───────────────────────────────────────────────┘         │
+│                                                              │
+│  ┌───────────────────────────────────────────────┐         │
+│  │  PostMessage API (与内容脚本通信)              │         │
+│  │  - 发送规则查询请求                            │         │
+│  │  - 接收匹配结果                                │         │
+│  └───────────────────────────────────────────────┘         │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 权限要求说明
+
+扩展在 `package.json` 中声明了以下权限：
+
+```json
+{
+  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",              // 存储规则和配置
+    "activeTab",            // 获取当前标签页信息
+    "webRequest",           // 拦截网络请求
+    "webRequestBlocking"    // 阻塞和修改请求
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["static/inject.js"],  // 页面可访问的注入脚本
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
+```
+
+每个权限的用途已在 [🔒 安全与隐私](#-安全与隐私) 章节中详细说明。
+
+---
+
 ## 🔧 开发指南
 
 ### 代码规范

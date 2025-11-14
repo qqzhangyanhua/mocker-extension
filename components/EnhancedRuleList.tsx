@@ -28,8 +28,7 @@ import {
 } from "antd"
 import { useMemo, useState } from "react"
 
-import { updateRule } from "~/lib/storage"
-import type { MockRule } from "~/lib/types"
+import type { MockRule, MockScene } from "~/lib/types"
 import { getAllGroups, searchRules } from "~/lib/utils"
 
 const { Text } = Typography
@@ -45,6 +44,7 @@ interface EnhancedRuleListProps {
   onCopyRule: (rule: MockRule) => void
   onBatchDelete: (ids: string[]) => void
   onUpdateRule: (id: string, updates: Partial<MockRule>) => void
+  currentScene?: MockScene | null
 }
 
 function EnhancedRuleList({
@@ -56,7 +56,8 @@ function EnhancedRuleList({
   onDeleteRule,
   onCopyRule,
   onBatchDelete,
-  onUpdateRule
+  onUpdateRule,
+  currentScene
 }: EnhancedRuleListProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchMode, setBatchMode] = useState(false)
@@ -106,14 +107,12 @@ function EnhancedRuleList({
 
   // 切换规则启用状态
   const handleToggleEnabled = async (rule: MockRule, enabled: boolean) => {
-    await updateRule(rule.id, { enabled })
-    await chrome.runtime.sendMessage({ type: "BROADCAST_CONFIG" })
+    await onUpdateRule(rule.id, { enabled })
   }
 
   // 更新规则分组
   const handleUpdateGroup = async (ruleId: string, group: string | undefined) => {
-    await updateRule(ruleId, { group: group || undefined })
-    onUpdateRule(ruleId, { group: group || undefined })
+    await onUpdateRule(ruleId, { group: group || undefined })
     setEditingGroupRule(null)
     setNewGroupName("")
     message.success("分组已更新")
@@ -121,14 +120,9 @@ function EnhancedRuleList({
 
   // 批量更新分组
   const handleBatchUpdateGroup = async (group: string | undefined) => {
-    const promises = selectedIds.map(id =>
-      updateRule(id, { group: group || undefined })
-    )
-    await Promise.all(promises)
-
-    selectedIds.forEach(id => {
-      onUpdateRule(id, { group: group || undefined })
-    })
+    for (const id of selectedIds) {
+      await onUpdateRule(id, { group: group || undefined })
+    }
 
     setSelectedIds([])
     setBatchMode(false)
@@ -161,10 +155,17 @@ function EnhancedRuleList({
     })
   }
 
+  // 检查规则是否在当前场景中
+  const isRuleInCurrentScene = (ruleId: string) => {
+    if (!currentScene) return false
+    return currentScene.rules.some(r => r.ruleId === ruleId && r.enabled)
+  }
+
   // 渲染规则项
   const renderRuleItem = (rule: MockRule) => {
     const isSelected = selectedRuleId === rule.id
     const isChecked = selectedIds.includes(rule.id)
+    const inCurrentScene = isRuleInCurrentScene(rule.id)
 
     return (
       <div
@@ -206,6 +207,13 @@ function EnhancedRuleList({
               <Tag icon={<FolderOutlined />} color="blue">
                 {rule.group}
               </Tag>
+            )}
+            {inCurrentScene && currentScene && (
+              <Tooltip title={`在场景 "${currentScene.name}" 中`}>
+                <Tag color="purple" style={{ fontSize: 11 }}>
+                  场景
+                </Tag>
+              </Tooltip>
             )}
             <Text type="secondary" style={{ fontSize: 12 }}>
               {rule.usageCount || 0} 次
@@ -344,6 +352,23 @@ function EnhancedRuleList({
         borderBottom: "1px solid #f0f0f0"
       }}>
         <Space direction="vertical" style={{ width: "100%" }}>
+          {/* 当前场景提示 */}
+          {currentScene && (
+            <div style={{ 
+              padding: "6px 12px", 
+              background: "#f0f5ff", 
+              border: "1px solid #d6e4ff",
+              borderRadius: 4,
+              fontSize: 12
+            }}>
+              <Space>
+                <Text type="secondary">当前场景:</Text>
+                <Text strong style={{ color: "#1890ff" }}>{currentScene.name}</Text>
+                <Text type="secondary">({currentScene.rules.filter(r => r.enabled).length} 条规则)</Text>
+              </Space>
+            </div>
+          )}
+          
           {/* 分组筛选 */}
           <Select
             style={{ width: "100%" }}

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Debug Storage - API Mocker</title>
+  <style>
+    body {
+      font-family: 'Monaco', 'Courier New', monospace;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #d4d4d4;
+    }
+    h2 {
+      color: #4ec9b0;
+      border-bottom: 2px solid #4ec9b0;
+      padding-bottom: 10px;
+    }
+    .rule {
+      background: #252526;
+      border: 1px solid #3e3e42;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 10px 0;
+    }
+    .rule.enabled {
+      border-left: 4px solid #52c41a;
+    }
+    .rule.disabled {
+      border-left: 4px solid #999;
+      opacity: 0.6;
+    }
+    .rule-name {
+      font-size: 16px;
+      font-weight: bold;
+      color: #569cd6;
+      margin-bottom: 8px;
+    }
+    .rule-detail {
+      margin: 5px 0;
+      font-size: 13px;
+    }
+    .label {
+      color: #9cdcfe;
+      font-weight: bold;
+    }
+    .value {
+      color: #ce9178;
+    }
+    .status-on {
+      color: #52c41a;
+      font-weight: bold;
+    }
+    .status-off {
+      color: #999;
+    }
+    pre {
+      background: #1e1e1e;
+      border: 1px solid #3e3e42;
+      padding: 10px;
+      overflow-x: auto;
+      border-radius: 4px;
+    }
+    button {
+      background: #0e639c;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #1177bb;
+    }
+    .warning {
+      background: #5a3e00;
+      border-left: 4px solid #ff8c00;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background: #0a3d0a;
+      border-left: 4px solid #52c41a;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h2>🔍 API Mocker Storage 诊断工具</h2>
+  
+  <div>
+    <button onclick="loadStorage()">🔄 刷新存储数据</button>
+    <button onclick="testMatch()">🧪 测试 URL 匹配</button>
+    <button onclick="clearAll()">🗑️ 清空所有数据</button>
+  </div>
+
+  <div id="config-section"></div>
+  <div id="rules-section"></div>
+  <div id="test-section"></div>
+
+  <script>
+    async function loadStorage() {
+      const data = await chrome.storage.local.get(['mock_config', 'mock_rules', 'mock_scenes', 'mock_records']);
+      
+      // 显示配置
+      const configHtml = `
+        <h2>⚙️ 全局配置</h2>
+        <pre>${JSON.stringify(data.mock_config || {}, null, 2)}</pre>
+      `;
+      document.getElementById('config-section').innerHTML = configHtml;
+      
+      // 显示规则
+      const rules = data.mock_rules || [];
+      let rulesHtml = `<h2>📋 规则列表 (共 ${rules.length} 条)</h2>`;
+      
+      if (rules.length === 0) {
+        rulesHtml += '<div class="warning">⚠️ 没有找到任何规则！</div>';
+      } else {
+        const enabledRules = rules.filter(r => r.enabled);
+        rulesHtml += `<div class="${enabledRules.length > 0 ? 'success' : 'warning'}">
+          已启用: ${enabledRules.length} / ${rules.length}
+        </div>`;
+        
+        rules.forEach((rule, index) => {
+          rulesHtml += `
+            <div class="rule ${rule.enabled ? 'enabled' : 'disabled'}">
+              <div class="rule-name">
+                ${index + 1}. ${rule.name} 
+                <span class="${rule.enabled ? 'status-on' : 'status-off'}">
+                  [${rule.enabled ? 'ON' : 'OFF'}]
+                </span>
+              </div>
+              <div class="rule-detail">
+                <span class="label">URL:</span> 
+                <span class="value">${rule.url}</span>
+              </div>
+              <div class="rule-detail">
+                <span class="label">匹配类型:</span> 
+                <span class="value">${rule.matchType}</span>
+                <span class="label" style="margin-left: 20px;">方法:</span> 
+                <span class="value">${rule.method}</span>
+              </div>
+              <div class="rule-detail">
+                <span class="label">状态码:</span> 
+                <span class="value">${rule.statusCode}</span>
+                <span class="label" style="margin-left: 20px;">延迟:</span> 
+                <span class="value">${rule.delay}ms</span>
+              </div>
+              <div class="rule-detail">
+                <span class="label">响应体:</span> 
+                <pre style="margin-top: 5px;">${rule.responseBody.substring(0, 200)}${rule.responseBody.length > 200 ? '...' : ''}</pre>
+              </div>
+            </div>
+          `;
+        });
+      }
+      
+      document.getElementById('rules-section').innerHTML = rulesHtml;
+    }
+    
+    function testMatch() {
+      const testUrl = prompt('输入要测试的 URL:', '/app/api/standardList/front/getListData');
+      if (!testUrl) return;
+      
+      const testMethod = prompt('输入 HTTP 方法:', 'POST');
+      if (!testMethod) return;
+      
+      chrome.storage.local.get(['mock_rules', 'mock_config'], (data) => {
+        const rules = data.mock_rules || [];
+        const config = data.mock_config || { enabled: true };
+        
+        let testHtml = `
+          <h2>🧪 匹配测试结果</h2>
+          <div class="rule-detail">
+            <span class="label">测试 URL:</span> <span class="value">${testUrl}</span><br>
+            <span class="label">测试方法:</span> <span class="value">${testMethod}</span><br>
+            <span class="label">全局开关:</span> <span class="${config.enabled ? 'status-on' : 'status-off'}">${config.enabled ? 'ON' : 'OFF'}</span>
+          </div>
+        `;
+        
+        // 规范化 URL
+        function normalizeUrl(url) {
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            try {
+              const urlObj = new URL(url);
+              return urlObj.pathname + urlObj.search + urlObj.hash;
+            } catch (e) {
+              return url;
+            }
+          }
+          return url;
+        }
+        
+        const normalizedTestUrl = normalizeUrl(testUrl);
+        testHtml += `<div class="rule-detail"><span class="label">规范化 URL:</span> <span class="value">${normalizedTestUrl}</span></div>`;
+        
+        // 测试每个规则
+        testHtml += '<h3>规则匹配详情:</h3>';
+        let matched = false;
+        
+        rules.forEach((rule, index) => {
+          const normalizedPattern = normalizeUrl(rule.url);
+          let isMatch = false;
+          let matchReason = '';
+          
+          if (!rule.enabled) {
+            matchReason = '❌ 规则未启用';
+          } else if (rule.method !== 'ALL' && rule.method !== testMethod.toUpperCase()) {
+            matchReason = `❌ 方法不匹配 (规则要求: ${rule.method})`;
+          } else {
+            // 测试匹配
+            switch (rule.matchType) {
+              case 'exact':
+                isMatch = testUrl === rule.url || normalizedTestUrl === normalizedPattern;
+                matchReason = isMatch ? '✅ 精确匹配成功' : `❌ 精确匹配失败`;
+                break;
+              case 'prefix':
+                const prefixPattern = rule.url.replace(/\*$/, '');
+                const normalizedPrefixPattern = normalizeUrl(prefixPattern);
+                isMatch = testUrl.startsWith(prefixPattern) || normalizedTestUrl.startsWith(normalizedPrefixPattern);
+                matchReason = isMatch ? '✅ 前缀匹配成功' : `❌ 前缀匹配失败`;
+                break;
+              case 'contains':
+                const cleanPattern = rule.url.replace(/^\*+|\*+$/g, '');
+                isMatch = testUrl.includes(cleanPattern) || normalizedTestUrl.includes(cleanPattern);
+                matchReason = isMatch ? `✅ 包含匹配成功 (查找: "${cleanPattern}")` : `❌ 包含匹配失败 (查找: "${cleanPattern}")`;
+                break;
+              case 'regex':
+                try {
+                  const regex = new RegExp(rule.url);
+                  isMatch = regex.test(testUrl) || regex.test(normalizedTestUrl);
+                  matchReason = isMatch ? '✅ 正则匹配成功' : '❌ 正则匹配失败';
+                } catch (e) {
+                  matchReason = `❌ 正则表达式错误: ${e.message}`;
+                }
+                break;
+            }
+          }
+          
+          if (isMatch && rule.enabled) matched = true;
+          
+          testHtml += `
+            <div class="rule ${isMatch && rule.enabled ? 'enabled' : 'disabled'}" style="margin: 10px 0;">
+              <div class="rule-name">${index + 1}. ${rule.name}</div>
+              <div class="rule-detail">
+                <span class="label">规则 URL:</span> <span class="value">${rule.url}</span><br>
+                <span class="label">匹配类型:</span> <span class="value">${rule.matchType}</span><br>
+                <span class="label">结果:</span> <span class="${isMatch ? 'status-on' : 'status-off'}">${matchReason}</span>
+              </div>
+            </div>
+          `;
+        });
+        
+        if (!matched) {
+          testHtml = '<div class="warning">⚠️ 没有找到匹配的规则！</div>' + testHtml;
+        } else {
+          testHtml = '<div class="success">✅ 找到匹配的规则！</div>' + testHtml;
+        }
+        
+        document.getElementById('test-section').innerHTML = testHtml;
+      });
+    }
+    
+    function clearAll() {
+      if (confirm('确定要清空所有数据吗？此操作不可恢复！')) {
+        chrome.storage.local.clear(() => {
+          alert('已清空所有数据！');
+          loadStorage();
+        });
+      }
+    }
+    
+    // 自动加载
+    loadStorage();
+  </script>
+</body>
+</html>
+

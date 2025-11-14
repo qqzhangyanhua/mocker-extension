@@ -2,6 +2,27 @@
 import type { RequestRecord } from "~/lib/types"
 import { syncNetworkInterception } from "~/lib/net-intercept"
 
+// 更新扩展图标和徽章状态
+async function updateExtensionIcon(): Promise<void> {
+  const config = await getConfig()
+  const rules = await getRules()
+  const enabledRulesCount = rules.filter(r => r.enabled).length
+
+  if (config.enabled) {
+    // 开启状态：显示绿色徽章和启用规则数量
+    await chrome.action.setBadgeText({ text: String(enabledRulesCount) })
+    await chrome.action.setBadgeBackgroundColor({ color: "#52c41a" }) // 绿色
+    await chrome.action.setTitle({ 
+      title: `API Mocker - 已开启\n启用规则: ${enabledRulesCount} 个\n拦截模式: ${config.interceptMode === 'page' ? '页面 Hook' : '网络拦截'}` 
+    })
+  } else {
+    // 关闭状态：显示灰色徽章
+    await chrome.action.setBadgeText({ text: "OFF" })
+    await chrome.action.setBadgeBackgroundColor({ color: "#999999" }) // 灰色
+    await chrome.action.setTitle({ title: "API Mocker - 已关闭" })
+  }
+}
+
 // Broadcast config to all tabs
 async function broadcastConfigUpdate(): Promise<void> {
   const [rules, config] = await Promise.all([getRules(), getConfig()])
@@ -22,6 +43,9 @@ async function broadcastConfigUpdate(): Promise<void> {
     return Promise.resolve()
   })
   await Promise.all(updatePromises)
+  
+  // 更新图标状态
+  await updateExtensionIcon()
 }
 
 // Handle messages from content scripts
@@ -62,6 +86,8 @@ onStorageChange((changes) => {
   if (changes.mock_rules || changes.mock_config) {
     broadcastConfigUpdate()
     syncNetworkInterception()
+    // 规则或配置变化时也更新图标
+    updateExtensionIcon()
   }
 })
 
@@ -74,11 +100,15 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   } else if (details.reason === "update") {
     console.log("[API Mocker] Extension updated")
   }
+  // 安装或更新后初始化图标状态
+  await updateExtensionIcon()
 })
 
 // On browser startup
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   console.log("[API Mocker] Extension started")
+  // 浏览器启动时初始化图标状态
+  await updateExtensionIcon()
 })
 
 // Ensure config injection on tab updates
@@ -99,5 +129,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 })
 
 console.log("[API Mocker] Service worker initialized")
-;(async()=>{ try{ await syncNetworkInterception() }catch{} })()
+;(async()=>{ 
+  try{ 
+    await syncNetworkInterception()
+    // 初始化时更新图标状态
+    await updateExtensionIcon()
+  }catch{} 
+})()
 console.log("[API Mocker] Service worker initialized")

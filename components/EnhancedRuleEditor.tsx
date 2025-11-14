@@ -75,6 +75,7 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
   const [responseBody, setResponseBody] = useState(rule.responseBody)
   const [activeTab, setActiveTab] = useState("basic")
   const [enableMockJs, setEnableMockJs] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     // 处理 responseHeaders 和 requestHeaders，将对象转为字符串用于文本框显示
@@ -102,6 +103,9 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
   }
 
   const handleSave = async () => {
+    if (saving) return
+    
+    setSaving(true)
     try {
       const values = await form.validateFields()
 
@@ -150,9 +154,8 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
         updatedAt: Date.now()
       }
 
-      onSave(updatedRule)
+      await onSave(updatedRule)
       setHasChanges(false)
-      message.success("规则保存成功")
     } catch (err: any) {
       const errorFields = err?.errorFields
       if (errorFields && errorFields.length > 0) {
@@ -162,6 +165,8 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
         message.error(`${fieldName}: ${errorMsg}`)
         form.scrollToField(fieldName)
       }
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -195,14 +200,15 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
       >
         <h2 style={{ margin: 0 }}>编辑规则</h2>
         <Space>
-          <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
+          <Button danger icon={<DeleteOutlined />} onClick={handleDelete} disabled={saving}>
             删除
           </Button>
           <Button
             type="primary"
             icon={<SaveOutlined />}
             onClick={handleSave}
-            disabled={!hasChanges}
+            loading={saving}
+            disabled={!hasChanges && !saving}
           >
             保存
           </Button>
@@ -353,8 +359,11 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
                       <Radio.Group
                         value={responseType}
                         onChange={(e) => {
-                          setResponseType(e.target.value)
-                          setHasChanges(true)
+                          const newType = e.target.value
+                          if (newType !== responseType) {
+                            setResponseType(newType)
+                            setHasChanges(true)
+                          }
                         }}
                       >
                         <Radio.Button value="json">JSON</Radio.Button>
@@ -392,8 +401,10 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
                   <JsonEditor
                     value={responseBody}
                     onChange={(value) => {
-                      setResponseBody(value)
-                      setHasChanges(true)
+                      if (value !== responseBody) {
+                        setResponseBody(value)
+                        setHasChanges(true)
+                      }
                     }}
                     height={400}
                     language={responseType === "html" ? "html" : responseType === "json" ? "json" : "plaintext"}

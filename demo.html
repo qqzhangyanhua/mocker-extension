@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二维码列表展示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            padding: 50px;
+        }
+
+        .error {
+            background: #ff4757;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px auto;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-card .number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-card .label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .qrcode-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        .qrcode-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .qrcode-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .qrcode-image {
+            width: 100%;
+            height: 280px;
+            object-fit: cover;
+            background: #f5f5f5;
+        }
+
+        .qrcode-content {
+            padding: 20px;
+        }
+
+        .qrcode-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .qrcode-info {
+            margin-bottom: 8px;
+            color: #666;
+            display: flex;
+            align-items: start;
+        }
+
+        .qrcode-info .label {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 70px;
+            margin-right: 8px;
+        }
+
+        .qrcode-info .value {
+            flex: 1;
+            word-break: break-all;
+        }
+
+        .qrcode-type {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin-top: 10px;
+        }
+
+        .qrcode-date {
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 12px;
+            border-top: 1px solid #eee;
+            padding-top: 12px;
+        }
+
+        .qrcode-link {
+            display: block;
+            margin-top: 12px;
+            padding: 8px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-size: 0.85em;
+            word-break: break-all;
+            color: #667eea;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .qrcode-link:hover {
+            background: #e9ecef;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #764ba2;
+            transform: rotate(180deg);
+        }
+
+        .refresh-btn:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 二维码管理系统 (API Mocker 测试页)</h1>
+            <p>实时数据展示 | 打开控制台查看拦截日志</p>
+        </div>
+
+        <div id="stats" class="stats" style="display: none;">
+            <div class="stat-card">
+                <div class="number" id="totalCount">0</div>
+                <div class="label">总数量</div>
+            </div>
+            <div class="stat-card">
+                <div class="number" id="devCount">0</div>
+                <div class="label">开发环境</div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading">
+            <div>加载中...</div>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="qrcode-list" class="qrcode-grid"></div>
+    </div>
+
+    <button class="refresh-btn" onclick="fetchData()" title="刷新数据">↻</button>
+
+    <script>
+        const API_URL = 'http://111.229.87.75:3000/absolute/qrcode';
+        const AUTH_TOKEN = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFkbWluMiIsInN1YiI6Miwicm9sZSI6ImFkbWluIiwibmlja25hbWUiOiLlvKDoibPljY4iLCJpYXQiOjE3NjMwMDM0MDQsImV4cCI6MTc2NTU5NTQwNH0.yTOnLfFMQun_7_ilQI8fYRodm44exl2AqxKTfw_T1TM';
+
+        // 格式化日期
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // 渲染二维码卡片
+        function renderQRCodes(data) {
+            const container = document.getElementById('qrcode-list');
+            container.innerHTML = '';
+
+            data.forEach((item, index) => {
+                const card = document.createElement('div');
+                card.className = 'qrcode-card';
+                card.style.animationDelay = `${index * 0.05}s`;
+                
+                card.innerHTML = `
+                    <img class="qrcode-image" 
+                         src="${item.url}" 
+                         alt="${item.desc}"
+                         onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22300%22 height=%22280%22%3E%3Crect width=%22300%22 height=%22280%22 fill=%22%23f0f0f0%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-family=%22Arial%22 font-size=%2218%22 fill=%22%23999%22%3E图片加载失败%3C/text%3E%3C/svg%3E'">
+                    <div class="qrcode-content">
+                        <div class="qrcode-title">${item.desc}</div>
+                        
+                        <div class="qrcode-info">
+                            <span class="label">归属人:</span>
+                            <span class="value">${item.belong}</span>
+                        </div>
+                        
+                        <div class="qrcode-info">
+                            <span class="label">ID:</span>
+                            <span class="value">${item.id}</span>
+                        </div>
+                        
+                        <span class="qrcode-type">${item.type === 'dev' ? '开发环境' : item.type}</span>
+                        
+                        <a href="${item.qrcodeInfo}" target="_blank" class="qrcode-link">
+                            查看二维码详情 →
+                        </a>
+                        
+                        <div class="qrcode-date">
+                            创建时间: ${formatDate(item.createdAt)}
+                        </div>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+
+            // 更新统计信息
+            const devCount = data.filter(item => item.type === 'dev').length;
+            document.getElementById('totalCount').textContent = data.length;
+            document.getElementById('devCount').textContent = devCount;
+            document.getElementById('stats').style.display = 'flex';
+        }
+
+        // 显示错误
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = `❌ ${message}`;
+            errorDiv.style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        // 获取数据
+        async function fetchData() {
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+
+            console.log('='.repeat(80));
+            console.log('🧪 [测试] 开始发起请求:', API_URL);
+            console.log('🧪 [测试] 请求方法: GET');
+            console.log('🧪 [测试] 提示: 请观察下方 [API Mocker] 开头的日志');
+            console.log('='.repeat(80));
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'zh-CN,zh;q=0.9',
+                        'Authorization': AUTH_TOKEN,
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+
+                console.log('='.repeat(80));
+                console.log('🧪 [测试] 请求完成!');
+                console.log('🧪 [测试] 响应状态码:', response.status);
+                console.log('🧪 [测试] 响应数据条数:', result.data ? result.data.length : 0);
+                console.log('🧪 [测试] 提示: 如果上方有 "✅ 匹配到规则" 说明拦截成功');
+                console.log('🧪 [测试] 提示: 如果上方有 "❌ 未找到匹配规则" 说明未拦截');
+                console.log('='.repeat(80));
+
+                if (result.code === 0 && result.data) {
+                    renderQRCodes(result.data);
+                } else {
+                    throw new Error(result.message || '数据格式错误');
+                }
+
+            } catch (error) {
+                console.error('请求失败:', error);
+                showError(`请求失败: ${error.message}`);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        // 页面加载时自动请求数据
+        window.addEventListener('DOMContentLoaded', () => {
+            // 显示插件安装状态
+            setTimeout(() => {
+                console.log('='.repeat(80));
+                console.log('🔧 [调试信息] 插件 Hook 安装状态:', window.__API_MOCKER_INSTALLED__ ? '✅ 已安装' : '❌ 未安装');
+                console.log('🔧 [调试信息] 插件版本:', window.__API_MOCKER_VERSION__ || '未知');
+                console.log('🔧 [调试信息] 页面就绪,准备发起请求');
+                console.log('='.repeat(80));
+                fetchData();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
+

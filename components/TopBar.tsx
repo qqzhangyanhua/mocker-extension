@@ -5,9 +5,9 @@ import {
   SearchOutlined,
   UploadOutlined
 } from "@ant-design/icons"
-import { Button, Input, Layout, Space, Upload, message } from "antd"
+import { Button, Input, Layout, Select, Space, Upload, message } from "antd"
 
-import type { MockRule } from "~/lib/types"
+import type { MockRule, InterceptMode } from "~/lib/types"
 
 const { Header } = Layout
 
@@ -17,9 +17,11 @@ interface TopBarProps {
   onExport: () => void
   onSearch: (keyword: string) => void
   onSceneManage?: () => void
+  interceptMode?: InterceptMode
+  onInterceptModeChange?: (mode: InterceptMode) => void
 }
 
-function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage }: TopBarProps) {
+function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage, interceptMode, onInterceptModeChange }: TopBarProps) {
   const handleFileUpload = (file: File) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -51,7 +53,22 @@ function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage }: T
         justifyContent: "space-between",
         alignItems: "center"
       }}>
-      <h1 style={{ margin: 0, fontSize: 20 }}>API Mocker - 规则管理</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>API Mocker - 规则管理</h1>
+        
+        {/* 拦截模式选择 */}
+        {interceptMode && onInterceptModeChange && (
+          <Select
+            value={interceptMode}
+            onChange={onInterceptModeChange}
+            style={{ width: 140 }}
+            options={[
+              { label: "页面 Hook", value: "page" },
+              { label: "网络拦截", value: "network" }
+            ]}
+          />
+        )}
+      </div>
 
       <Space>
         <Input
