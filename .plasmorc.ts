@@ -10,6 +10,9 @@ export default {
     description: "接口劫持Mock工具 - 拦截和模拟HTTP请求响应",
     version: "1.0.0",
     permissions: ["storage", "activeTab", "webRequest", "webRequestBlocking"],
-    host_permissions: hosts
+    host_permissions: hosts,
+    content_security_policy: {
+      extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    }
   }
 }

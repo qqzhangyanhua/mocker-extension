@@ -73,24 +73,26 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
   const [hasChanges, setHasChanges] = useState(false)
   const [responseType, setResponseType] = useState<ResponseType>(rule.responseType)
   const [responseBody, setResponseBody] = useState(rule.responseBody)
+  const [responseHeaders, setResponseHeaders] = useState(
+    rule.responseHeaders ? JSON.stringify(rule.responseHeaders, null, 2) : ""
+  )
+  const [requestHeaders, setRequestHeaders] = useState(
+    rule.requestHeaders ? JSON.stringify(rule.requestHeaders, null, 2) : ""
+  )
   const [activeTab, setActiveTab] = useState("basic")
   const [enableMockJs, setEnableMockJs] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    // 处理 responseHeaders 和 requestHeaders，将对象转为字符串用于文本框显示
-    const formValues = {
-      ...rule,
-      responseHeaders: rule.responseHeaders 
-        ? JSON.stringify(rule.responseHeaders, null, 2)
-        : "",
-      requestHeaders: rule.requestHeaders
-        ? JSON.stringify(rule.requestHeaders, null, 2)
-        : ""
-    }
-    form.setFieldsValue(formValues)
+    form.setFieldsValue(rule)
     setResponseType(rule.responseType)
     setResponseBody(rule.responseBody)
+    setResponseHeaders(
+      rule.responseHeaders ? JSON.stringify(rule.responseHeaders, null, 2) : ""
+    )
+    setRequestHeaders(
+      rule.requestHeaders ? JSON.stringify(rule.requestHeaders, null, 2) : ""
+    )
     setHasChanges(false)
 
     // 检测是否使用了 Mock.js 语法
@@ -120,13 +122,13 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
         }
       }
 
-      // 解析 responseHeaders 和 requestHeaders (如果是字符串需要解析为对象)
-      let responseHeaders = values.responseHeaders
-      let requestHeaders = values.requestHeaders
+      // 解析 responseHeaders 和 requestHeaders
+      let parsedResponseHeaders = undefined
+      let parsedRequestHeaders = undefined
 
-      if (typeof responseHeaders === 'string' && responseHeaders.trim()) {
+      if (responseHeaders.trim()) {
         try {
-          responseHeaders = JSON.parse(responseHeaders)
+          parsedResponseHeaders = JSON.parse(responseHeaders)
         } catch {
           message.error("响应头格式不正确，必须是有效的 JSON")
           setActiveTab("advanced")
@@ -134,9 +136,9 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
         }
       }
 
-      if (typeof requestHeaders === 'string' && requestHeaders.trim()) {
+      if (requestHeaders.trim()) {
         try {
-          requestHeaders = JSON.parse(requestHeaders)
+          parsedRequestHeaders = JSON.parse(requestHeaders)
         } catch {
           message.error("请求头匹配格式不正确，必须是有效的 JSON")
           setActiveTab("advanced")
@@ -149,8 +151,8 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
         ...values,
         responseBody,
         responseType,
-        responseHeaders: responseHeaders || undefined,
-        requestHeaders: requestHeaders || undefined,
+        responseHeaders: parsedResponseHeaders,
+        requestHeaders: parsedRequestHeaders,
         updatedAt: Date.now()
       }
 
@@ -186,6 +188,34 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
     setResponseBody(template)
     setEnableMockJs(true)
     message.success("模板已应用")
+  }
+
+  // 快速添加响应头
+  const addResponseHeader = (key: string, value: string) => {
+    try {
+      const headers = responseHeaders.trim() ? JSON.parse(responseHeaders) : {}
+      headers[key] = value
+      const newHeaders = JSON.stringify(headers, null, 2)
+      setResponseHeaders(newHeaders)
+      setHasChanges(true)
+      message.success(`已添加响应头: ${key}`)
+    } catch {
+      message.error("当前响应头格式不正确，请先修正")
+    }
+  }
+
+  // 快速添加请求头匹配
+  const addRequestHeader = (key: string, value: string) => {
+    try {
+      const headers = requestHeaders.trim() ? JSON.parse(requestHeaders) : {}
+      headers[key] = value
+      const newHeaders = JSON.stringify(headers, null, 2)
+      setRequestHeaders(newHeaders)
+      setHasChanges(true)
+      message.success(`已添加请求头匹配: ${key}`)
+    } catch {
+      message.error("当前请求头格式不正确，请先修正")
+    }
   }
 
   return (
@@ -435,29 +465,129 @@ function EnhancedRuleEditor({ rule, onSave, onDelete }: EnhancedRuleEditorProps)
               key: 'advanced',
               label: '高级设置',
               children: (
-                <>
-                  <Form.Item
-                    label="响应头"
-                    name="responseHeaders"
-                    extra={'JSON 格式，例如: {"Content-Type": "application/json"}'}
-                  >
-                    <TextArea
-                      rows={6}
-                      placeholder={'{\n  "Content-Type": "application/json",\n  "X-Custom-Header": "value"\n}'}
+                <Space direction="vertical" style={{ width: "100%" }} size="large">
+                  {/* 响应头 */}
+                  <div>
+                    <div style={{ 
+                      display: "flex", 
+                      justifyContent: "space-between", 
+                      alignItems: "center",
+                      marginBottom: 8 
+                    }}>
+                      <label style={{ fontWeight: 500 }}>响应头</label>
+                      <Select
+                        placeholder="快速添加常用响应头"
+                        style={{ width: 300 }}
+                        onChange={(value) => {
+                          const [key, val] = value.split(':::')
+                          addResponseHeader(key, val)
+                        }}
+                        value={undefined}
+                      >
+                        <Select.Option value="Content-Type:::application/json">
+                          Content-Type: application/json
+                        </Select.Option>
+                        <Select.Option value="Content-Type:::text/html; charset=utf-8">
+                          Content-Type: text/html
+                        </Select.Option>
+                        <Select.Option value="Content-Type:::text/plain">
+                          Content-Type: text/plain
+                        </Select.Option>
+                        <Select.Option value="Access-Control-Allow-Origin:::*">
+                          Access-Control-Allow-Origin: *
+                        </Select.Option>
+                        <Select.Option value="Access-Control-Allow-Methods:::GET, POST, PUT, DELETE, OPTIONS">
+                          Access-Control-Allow-Methods
+                        </Select.Option>
+                        <Select.Option value="Access-Control-Allow-Headers:::*">
+                          Access-Control-Allow-Headers: *
+                        </Select.Option>
+                        <Select.Option value="Access-Control-Allow-Credentials:::true">
+                          Access-Control-Allow-Credentials: true
+                        </Select.Option>
+                        <Select.Option value="Cache-Control:::no-cache">
+                          Cache-Control: no-cache
+                        </Select.Option>
+                        <Select.Option value="X-Custom-Header:::custom-value">
+                          X-Custom-Header (自定义)
+                        </Select.Option>
+                      </Select>
+                    </div>
+                    <JsonEditor
+                      value={responseHeaders}
+                      onChange={(value) => {
+                        if (value !== responseHeaders) {
+                          setResponseHeaders(value)
+                          setHasChanges(true)
+                        }
+                      }}
+                      height={200}
+                      language="json"
                     />
-                  </Form.Item>
+                    <div style={{ 
+                      fontSize: 12, 
+                      color: "#666", 
+                      marginTop: 4 
+                    }}>
+                      JSON 格式，例如: {`{"Content-Type": "application/json"}`}
+                    </div>
+                  </div>
 
-                  <Form.Item
-                    label="请求头匹配"
-                    name="requestHeaders"
-                    extra="可选，仅当请求包含这些头部时才匹配"
-                  >
-                    <TextArea
-                      rows={4}
-                      placeholder={'{\n  "Authorization": "Bearer token"\n}'}
+                  {/* 请求头匹配 */}
+                  <div>
+                    <div style={{ 
+                      display: "flex", 
+                      justifyContent: "space-between", 
+                      alignItems: "center",
+                      marginBottom: 8 
+                    }}>
+                      <label style={{ fontWeight: 500 }}>请求头匹配</label>
+                      <Select
+                        placeholder="快速添加常用请求头"
+                        style={{ width: 300 }}
+                        onChange={(value) => {
+                          const [key, val] = value.split(':::')
+                          addRequestHeader(key, val)
+                        }}
+                        value={undefined}
+                      >
+                        <Select.Option value="Authorization:::Bearer token">
+                          Authorization: Bearer token
+                        </Select.Option>
+                        <Select.Option value="Content-Type:::application/json">
+                          Content-Type: application/json
+                        </Select.Option>
+                        <Select.Option value="X-Requested-With:::XMLHttpRequest">
+                          X-Requested-With: XMLHttpRequest
+                        </Select.Option>
+                        <Select.Option value="Accept:::application/json">
+                          Accept: application/json
+                        </Select.Option>
+                        <Select.Option value="X-Custom-Token:::your-token">
+                          X-Custom-Token (自定义)
+                        </Select.Option>
+                      </Select>
+                    </div>
+                    <JsonEditor
+                      value={requestHeaders}
+                      onChange={(value) => {
+                        if (value !== requestHeaders) {
+                          setRequestHeaders(value)
+                          setHasChanges(true)
+                        }
+                      }}
+                      height={200}
+                      language="json"
                     />
-                  </Form.Item>
-                </>
+                    <div style={{ 
+                      fontSize: 12, 
+                      color: "#666", 
+                      marginTop: 4 
+                    }}>
+                      可选，仅当请求包含这些头部时才匹配。例如: {`{"Authorization": "Bearer token"}`}
+                    </div>
+                  </div>
+                </Space>
               )
             }
           ]}

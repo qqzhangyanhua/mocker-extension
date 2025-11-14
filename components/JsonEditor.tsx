@@ -1,12 +1,21 @@
 import Editor from "@monaco-editor/react"
-import { Button, Card, Space, Tooltip, message, Modal, Input } from "antd"
+import { Button, Card, Space, Tooltip, message, Modal, Input, Dropdown } from "antd"
+import type { MenuProps } from "antd"
 import {
   CheckCircleOutlined,
   CompressOutlined,
   ExpandOutlined,
   FormatPainterOutlined,
   CopyOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  ClearOutlined,
+  UndoOutlined,
+  RedoOutlined,
+  SearchOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  SwapOutlined,
+  AppstoreAddOutlined
 } from "@ant-design/icons"
 import { useState, useRef, useEffect } from "react"
 import type { editor } from "monaco-editor"
@@ -19,13 +28,72 @@ loader.init().catch(console.error)
 
 const { TextArea } = Input
 
+// JSON 示例模板
+const jsonTemplates = {
+  empty: "{}",
+  array: "[]",
+  basicObject: `{
+  "id": 1,
+  "name": "示例名称",
+  "description": "这是一个示例描述",
+  "status": "active",
+  "createdAt": "2024-01-01T00:00:00Z"
+}`,
+  userInfo: `{
+  "userId": 12345,
+  "username": "john_doe",
+  "email": "john@example.com",
+  "profile": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "age": 30,
+    "avatar": "https://example.com/avatar.jpg"
+  },
+  "roles": ["user", "admin"],
+  "isActive": true,
+  "lastLogin": "2024-01-01T12:00:00Z"
+}`,
+  apiResponse: `{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "items": [
+      {
+        "id": 1,
+        "title": "项目一",
+        "content": "这是项目描述"
+      },
+      {
+        "id": 2,
+        "title": "项目二",
+        "content": "这是项目描述"
+      }
+    ],
+    "total": 100,
+    "page": 1,
+    "pageSize": 10
+  },
+  "timestamp": 1640995200000
+}`,
+  errorResponse: `{
+  "code": 500,
+  "message": "服务器内部错误",
+  "error": {
+    "type": "InternalServerError",
+    "details": "数据库连接失败",
+    "stack": "Error: Connection timeout\\n    at Database.connect..."
+  },
+  "timestamp": 1640995200000
+}`
+}
+
 interface JsonEditorProps {
   value: string
   onChange: (value: string) => void
   height?: string | number
   readOnly?: boolean
   language?: string
-  theme?: "vs-dark" | "light"
+  theme?: "vs" | "vs-dark" | "hc-black"
 }
 
 function JsonEditor({
@@ -34,7 +102,7 @@ function JsonEditor({
   height = 400,
   readOnly = false,
   language = "json",
-  theme = "light"
+  theme = "vs"
 }: JsonEditorProps) {
   const [isValid, setIsValid] = useState(true)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -42,6 +110,7 @@ function JsonEditor({
   const [errorMessage, setErrorMessage] = useState<string>("")
   const [pasteModalVisible, setPasteModalVisible] = useState(false)
   const [tempPasteContent, setTempPasteContent] = useState("")
+  const [currentTheme, setCurrentTheme] = useState<"vs" | "vs-dark" | "hc-black">(theme)
 
   // 验证 JSON
   const validateJSON = (content: string) => {
@@ -125,6 +194,172 @@ function JsonEditor({
     setTempPasteContent("")
   }
 
+  // 清空内容
+  const handleClear = () => {
+    Modal.confirm({
+      title: "确认清空",
+      content: "确定要清空所有内容吗？此操作不可撤销。",
+      okText: "确定",
+      cancelText: "取消",
+      okButtonProps: { danger: true },
+      onOk: () => {
+        if (editorRef.current) {
+          editorRef.current.setValue("")
+          onChange("")
+          message.success("已清空内容")
+        }
+      }
+    })
+  }
+
+  // 撤销
+  const handleUndo = () => {
+    if (editorRef.current) {
+      editorRef.current.trigger("keyboard", "undo", null)
+    }
+  }
+
+  // 重做
+  const handleRedo = () => {
+    if (editorRef.current) {
+      editorRef.current.trigger("keyboard", "redo", null)
+    }
+  }
+
+  // 查找/替换
+  const handleFind = () => {
+    if (editorRef.current) {
+      editorRef.current.trigger("keyboard", "actions.find", null)
+    }
+  }
+
+  // 导入文件
+  const handleImport = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = ".json,.txt"
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0]
+      if (!file) return
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const content = event.target?.result as string
+        if (editorRef.current) {
+          editorRef.current.setValue(content)
+          onChange(content)
+          validateJSON(content)
+          message.success(`已导入文件: ${file.name}`)
+        }
+      }
+      reader.onerror = () => {
+        message.error("读取文件失败")
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }
+
+  // 导出文件
+  const handleExport = () => {
+    if (!editorRef.current) return
+
+    const content = editorRef.current.getValue()
+    if (!content.trim()) {
+      message.warning("内容为空，无法导出")
+      return
+    }
+
+    try {
+      // 如果是JSON，先验证并格式化
+      let exportContent = content
+      if (language === "json") {
+        const parsed = JSON.parse(content)
+        exportContent = JSON.stringify(parsed, null, 2)
+      }
+
+      const blob = new Blob([exportContent], { type: "application/json" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `export-${Date.now()}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      message.success("导出成功")
+    } catch (err: any) {
+      message.error(`导出失败: ${err.message}`)
+    }
+  }
+
+  // 转义JSON字符串
+  const handleEscape = () => {
+    if (!editorRef.current) return
+
+    try {
+      const content = editorRef.current.getValue()
+      if (!content.trim()) {
+        message.warning("内容为空")
+        return
+      }
+
+      // 将JSON对象转为转义的字符串
+      const escaped = JSON.stringify(content)
+      editorRef.current.setValue(escaped)
+      onChange(escaped)
+      message.success("已转义")
+    } catch (err: any) {
+      message.error(`转义失败: ${err.message}`)
+    }
+  }
+
+  // 反转义JSON字符串
+  const handleUnescape = () => {
+    if (!editorRef.current) return
+
+    try {
+      const content = editorRef.current.getValue()
+      if (!content.trim()) {
+        message.warning("内容为空")
+        return
+      }
+
+      // 将转义的字符串转回JSON对象
+      const unescaped = JSON.parse(content)
+      const result = typeof unescaped === "string" ? unescaped : JSON.stringify(unescaped, null, 2)
+      editorRef.current.setValue(result)
+      onChange(result)
+      message.success("已反转义")
+    } catch (err: any) {
+      message.error(`反转义失败: ${err.message}`)
+    }
+  }
+
+  // 插入示例模板
+  const insertTemplate = (template: string) => {
+    if (editorRef.current) {
+      const currentValue = editorRef.current.getValue()
+      if (currentValue.trim()) {
+        Modal.confirm({
+          title: "覆盖当前内容？",
+          content: "当前编辑器有内容，是否覆盖？",
+          okText: "覆盖",
+          cancelText: "取消",
+          onOk: () => {
+            editorRef.current?.setValue(template)
+            onChange(template)
+            message.success("已插入模板")
+          }
+        })
+      } else {
+        editorRef.current.setValue(template)
+        onChange(template)
+        message.success("已插入模板")
+      }
+    }
+  }
+
   // 确认粘贴大文本
   const confirmLargePaste = () => {
     if (editorRef.current && tempPasteContent) {
@@ -137,11 +372,18 @@ function JsonEditor({
     setTempPasteContent("")
   }
 
+  // 切换主题
+  const toggleTheme = () => {
+    const newTheme = currentTheme === "vs" ? "vs-dark" : "vs"
+    setCurrentTheme(newTheme)
+    message.success(`已切换到${newTheme === "vs" ? "浅色" : "深色"}主题`)
+  }
+
   // 编辑器挂载
   const handleEditorMount = (editor: editor.IStandaloneCodeEditor) => {
     editorRef.current = editor
 
-    // 配置编辑器选项 - 移除所有限制
+    // 配置编辑器选项 - 保留语法高亮的同时移除大小限制
     editor.updateOptions({
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
@@ -160,19 +402,24 @@ function JsonEditor({
         horizontalScrollbarSize: 10,
         useShadows: false
       },
-      // 完全移除所有文本大小限制
-      maxTokenizationLineLength: Number.MAX_SAFE_INTEGER,
+      // 保留语法高亮，但增加行长度限制
+      maxTokenizationLineLength: 20000, // 增加到合理的大小
       stopRenderingLineAfter: -1,
       largeFileOptimizations: false,
-      // 禁用某些可能限制大文本的功能
-      renderValidationDecorations: "off",
-      renderWhitespace: "none",
+      // 启用验证装饰以支持JSON错误提示
+      renderValidationDecorations: "on",
+      renderWhitespace: "selection",
       renderControlCharacters: false,
-      renderLineHighlight: "none",
+      renderLineHighlight: "line",
       // 增加最大内容长度
       unicodeHighlight: {
         ambiguousCharacters: false,
         invisibleCharacters: false
+      },
+      // 启用语法高亮相关选项
+      colorDecorators: true,
+      bracketPairColorization: {
+        enabled: true
       }
     })
 
@@ -243,17 +490,15 @@ function JsonEditor({
       comments: false,
       strings: true
     },
-    // 完全移除所有大小限制
-    maxTokenizationLineLength: Number.MAX_SAFE_INTEGER,
-    // 禁用语法高亮的长行限制
+    // 保留语法高亮，设置合理的行长度限制
+    maxTokenizationLineLength: 20000,
     stopRenderingLineAfter: -1,
-    // 禁用大文件优化以允许处理大文本
     largeFileOptimizations: false,
-    // 禁用可能影响大文本性能的渲染选项
-    renderValidationDecorations: "off",
-    renderWhitespace: "none",
+    // 启用验证装饰以支持JSON错误提示和语法高亮
+    renderValidationDecorations: "on",
+    renderWhitespace: "selection",
     renderControlCharacters: false,
-    renderLineHighlight: "none",
+    renderLineHighlight: "line",
     // 增加滚动条大小以便于导航
     scrollbar: {
       verticalScrollbarSize: 10,
@@ -267,7 +512,21 @@ function JsonEditor({
     unicodeHighlight: {
       ambiguousCharacters: false,
       invisibleCharacters: false
-    }
+    },
+    // 启用语法高亮相关的重要选项
+    colorDecorators: true,
+    bracketPairColorization: {
+      enabled: true,
+      independentColorPoolPerBracketType: true
+    },
+    // 启用代码片段和参数提示
+    snippetSuggestions: "inline",
+    parameterHints: {
+      enabled: true
+    },
+    // 启用自动闭合
+    autoClosingBrackets: "always",
+    autoClosingQuotes: "always"
   }
 
   const containerStyle: React.CSSProperties = isFullscreen
@@ -302,49 +561,187 @@ function JsonEditor({
               </Tooltip>
             )}
           </Space>
-          <Space>
+          <Space wrap>
+            {/* 编辑操作 */}
             {!readOnly && (
               <>
-                <Tooltip title="粘贴大文本">
+                <Tooltip title="撤销 (Ctrl+Z)">
                   <Button
                     size="small"
-                    icon={<FileTextOutlined />}
-                    onClick={handleLargePaste}
-                  >
-                    粘贴大文本
-                  </Button>
+                    icon={<UndoOutlined />}
+                    onClick={handleUndo}
+                  />
                 </Tooltip>
-                <Tooltip title="格式化 (Ctrl+S)">
+                <Tooltip title="重做 (Ctrl+Shift+Z)">
+                  <Button
+                    size="small"
+                    icon={<RedoOutlined />}
+                    onClick={handleRedo}
+                  />
+                </Tooltip>
+                <Tooltip title="查找/替换 (Ctrl+F)">
+                  <Button
+                    size="small"
+                    icon={<SearchOutlined />}
+                    onClick={handleFind}
+                  />
+                </Tooltip>
+                <Tooltip title="清空内容">
+                  <Button
+                    size="small"
+                    danger
+                    icon={<ClearOutlined />}
+                    onClick={handleClear}
+                  />
+                </Tooltip>
+              </>
+            )}
+
+            {/* 格式化操作 */}
+            {!readOnly && language === "json" && (
+              <>
+                <Tooltip title="格式化">
                   <Button
                     size="small"
                     icon={<FormatPainterOutlined />}
                     onClick={handleFormat}
-                  >
-                    格式化
-                  </Button>
+                  />
                 </Tooltip>
-                {language === "json" && (
-                  <Tooltip title="压缩 JSON">
-                    <Button
-                      size="small"
-                      icon={<CompressOutlined />}
-                      onClick={handleMinify}
-                    >
-                      压缩
-                    </Button>
-                  </Tooltip>
-                )}
+                <Tooltip title="压缩">
+                  <Button
+                    size="small"
+                    icon={<CompressOutlined />}
+                    onClick={handleMinify}
+                  />
+                </Tooltip>
               </>
             )}
+
+            {/* 转换操作 */}
+            {!readOnly && language === "json" && (
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: "escape",
+                      label: "转义字符串",
+                      icon: <SwapOutlined />,
+                      onClick: handleEscape
+                    },
+                    {
+                      key: "unescape",
+                      label: "反转义字符串",
+                      icon: <SwapOutlined rotate={180} />,
+                      onClick: handleUnescape
+                    }
+                  ]
+                }}
+              >
+                <Tooltip title="转换工具">
+                  <Button size="small" icon={<SwapOutlined />}>
+                    转换
+                  </Button>
+                </Tooltip>
+              </Dropdown>
+            )}
+
+            {/* 文件操作 */}
+            {!readOnly && (
+              <>
+                <Tooltip title="导入文件">
+                  <Button
+                    size="small"
+                    icon={<UploadOutlined />}
+                    onClick={handleImport}
+                  />
+                </Tooltip>
+                <Tooltip title="导出文件">
+                  <Button
+                    size="small"
+                    icon={<DownloadOutlined />}
+                    onClick={handleExport}
+                  />
+                </Tooltip>
+              </>
+            )}
+
+            {/* 模板插入 */}
+            {!readOnly && language === "json" && (
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: "empty",
+                      label: "空对象",
+                      onClick: () => insertTemplate(jsonTemplates.empty)
+                    },
+                    {
+                      key: "array",
+                      label: "空数组",
+                      onClick: () => insertTemplate(jsonTemplates.array)
+                    },
+                    {
+                      type: "divider"
+                    },
+                    {
+                      key: "basic",
+                      label: "基础对象",
+                      onClick: () => insertTemplate(jsonTemplates.basicObject)
+                    },
+                    {
+                      key: "user",
+                      label: "用户信息",
+                      onClick: () => insertTemplate(jsonTemplates.userInfo)
+                    },
+                    {
+                      key: "api",
+                      label: "API 响应",
+                      onClick: () => insertTemplate(jsonTemplates.apiResponse)
+                    },
+                    {
+                      key: "error",
+                      label: "错误响应",
+                      onClick: () => insertTemplate(jsonTemplates.errorResponse)
+                    }
+                  ]
+                }}
+              >
+                <Tooltip title="插入模板">
+                  <Button size="small" icon={<AppstoreAddOutlined />}>
+                    模板
+                  </Button>
+                </Tooltip>
+              </Dropdown>
+            )}
+
+            {/* 其他操作 */}
             <Tooltip title="复制">
               <Button
                 size="small"
                 icon={<CopyOutlined />}
                 onClick={handleCopy}
+              />
+            </Tooltip>
+
+            {!readOnly && (
+              <Tooltip title="粘贴大文本">
+                <Button
+                  size="small"
+                  icon={<FileTextOutlined />}
+                  onClick={handleLargePaste}
+                />
+              </Tooltip>
+            )}
+
+            <Tooltip title={currentTheme === "vs" ? "深色主题" : "浅色主题"}>
+              <Button
+                size="small"
+                onClick={toggleTheme}
               >
-                复制
+                {currentTheme === "vs" ? "🌙" : "☀️"}
               </Button>
             </Tooltip>
+
             <Tooltip title={isFullscreen ? "退出全屏" : "全屏"}>
               <Button
                 size="small"
@@ -363,7 +760,7 @@ function JsonEditor({
           value={value}
           onChange={handleEditorChange}
           onMount={handleEditorMount}
-          theme={theme}
+          theme={currentTheme}
           options={editorOptions}
           loading={
             <div style={{
