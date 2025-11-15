@@ -40,7 +40,9 @@
       "storage",
       "activeTab",
       "webRequest",
-      "webRequestBlocking"
+      "webRequestBlocking",
+      "downloads",
+      "contextMenus"
     ],
     "web_accessible_resources": [
       {

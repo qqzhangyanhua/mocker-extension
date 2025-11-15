@@ -16,8 +16,11 @@
     }
   });
 
-  function askRule(url, method){
+  function askRule(url, method, requestBody){
     console.log('[API Mocker] 🔍 查询匹配规则 - URL:', url, 'Method:', method);
+    if (requestBody) {
+      console.log('[API Mocker]    └─ 请求体长度:', requestBody.length, '字节');
+    }
     return new Promise((resolve) => {
       const id = Math.random().toString(36).slice(2);
       let timeout = setTimeout(() => {
@@ -40,13 +43,35 @@
         }
       }
       window.addEventListener('message', onMsg);
-      window.postMessage({ type: 'API_MOCKER_REQUEST', id, url, method }, '*');
+      window.postMessage({ type: 'API_MOCKER_REQUEST', id, url, method, requestBody }, '*');
     });
   }
 
   async function hookFetch(input, init){
     const url = typeof input === 'string' ? input : (input && (input.url || (input instanceof URL && input.href))) || '';
     const method = (init && init.method) || 'GET';
+    let requestBody = null;
+    
+    // 提取请求体
+    if (init && init.body) {
+      if (typeof init.body === 'string') {
+        requestBody = init.body;
+      } else if (init.body instanceof FormData) {
+        // FormData 转换为 URLSearchParams 格式
+        const params = new URLSearchParams();
+        for (const [key, value] of init.body.entries()) {
+          params.append(key, value.toString());
+        }
+        requestBody = params.toString();
+      } else {
+        try {
+          requestBody = JSON.stringify(init.body);
+        } catch (e) {
+          requestBody = String(init.body);
+        }
+      }
+    }
+    
     console.log('[API Mocker] 🌐 拦截 Fetch 请求:', url, '| 方法:', method);
 
     if (!__enabled) {
@@ -59,9 +84,17 @@
       return __origFetch.call(window, input, init);
     }
 
-    const rule = await askRule(url, method);
+    const rule = await askRule(url, method, requestBody);
     if (rule){
       console.log('[API Mocker] 🎯 使用规则返回 Mock 数据:', rule.name);
+      
+      // 检查是否是代理模式
+      if (rule.proxyConfig && rule.proxyConfig.enabled && rule.proxyConfig.mode === 'proxy') {
+        console.log('[API Mocker] 🔀 代理模式 - 转发到:', rule.proxyConfig.targetUrl);
+        // 让真实请求通过，由 background 处理代理
+        // 这里暂时返回 Mock 响应，完整的代理功能需要在 service worker 中实现
+      }
+      
       if (rule.delay && rule.delay > 0) await new Promise(r => setTimeout(r, rule.delay));
       const headers = new Headers(rule.responseHeaders || {});
       const res = new Response(rule.responseBody || '', { status: rule.statusCode || 200, headers });
@@ -95,10 +128,30 @@
     xhr.send = function(body){
       console.log('[API Mocker] 📨 拦截 XHR.send:', __url);
       
+      // 提取请求体
+      let requestBody = null;
+      if (body) {
+        if (typeof body === 'string') {
+          requestBody = body;
+        } else if (body instanceof FormData) {
+          const params = new URLSearchParams();
+          for (const [key, value] of body.entries()) {
+            params.append(key, value.toString());
+          }
+          requestBody = params.toString();
+        } else {
+          try {
+            requestBody = JSON.stringify(body);
+          } catch (e) {
+            requestBody = String(body);
+          }
+        }
+      }
+      
       if (__enabled && __mode === 'page'){
         // 异步处理 Mock 逻辑
         (async () => {
-          const rule = await askRule(__url, __method);
+          const rule = await askRule(__url, __method, requestBody);
           if (rule){
             console.log('[API Mocker] 🎯 使用规则返回 XHR Mock 数据:', rule.name);
             

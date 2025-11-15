@@ -1,5 +1,5 @@
 ﻿import { addRecord, getConfig, getRules, onStorageChange, updateConfig } from "~/lib/storage"
-import type { RequestRecord } from "~/lib/types"
+import type { RequestRecord, ImageInfo } from "~/lib/types"
 import { syncNetworkInterception } from "~/lib/net-intercept"
 
 // 更新扩展图标和徽章状态
@@ -70,6 +70,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ success: true })
           break
         }
+        case "GET_COLLECTED_IMAGES": {
+          // 从临时存储获取收集的图片数据
+          const result = await chrome.storage.local.get('temp_collected_images')
+          sendResponse({ images: result.temp_collected_images || [] })
+          break
+        }
         default:
           sendResponse({ error: "Unknown message type" })
       }
@@ -102,6 +108,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
   // 安装或更新后初始化图标状态
   await updateExtensionIcon()
+
+  // 创建右键菜单
+  chrome.contextMenus.create({
+    id: 'collect-images',
+    title: '收集页面图片',
+    contexts: ['page', 'image']
+  })
 })
 
 // On browser startup
@@ -129,11 +142,38 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 })
 
 console.log("[API Mocker] Service worker initialized")
-;(async()=>{ 
-  try{ 
+;(async()=>{
+  try{
     await syncNetworkInterception()
     // 初始化时更新图标状态
     await updateExtensionIcon()
-  }catch{} 
+  }catch{}
 })()
-console.log("[API Mocker] Service worker initialized")
+
+// ========== 图片下载功能 ==========
+
+// 处理右键菜单点击
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'collect-images' && tab?.id) {
+    try {
+      // 向当前页面的content script发送消息收集图片
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'COLLECT_IMAGES' })
+
+      if (response.success && response.images) {
+        const images: ImageInfo[] = response.images
+
+        // 临时存储收集的图片数据
+        await chrome.storage.local.set({ temp_collected_images: images })
+
+        // 打开新标签页显示图片管理界面
+        await chrome.tabs.create({
+          url: chrome.runtime.getURL('tabs/images.html')
+        })
+      } else {
+        console.error('收集图片失败:', response.error)
+      }
+    } catch (error) {
+      console.error('收集图片时出错:', error)
+    }
+  }
+})

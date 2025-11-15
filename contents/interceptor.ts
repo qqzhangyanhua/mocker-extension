@@ -72,10 +72,13 @@ function setupPageBridge(): void {
   window.addEventListener("message", async (event) => {
     const data = (event as MessageEvent).data || {}
     if (data.type === "API_MOCKER_REQUEST") {
-      const { id, url, method } = data
+      const { id, url, method, requestBody } = data
       console.log("[API Mocker] 📨 收到规则查询请求")
       console.log("[API Mocker]    ├─ URL:", url)
-      console.log("[API Mocker]    └─ Method:", method)
+      console.log("[API Mocker]    ├─ Method:", method)
+      if (requestBody) {
+        console.log("[API Mocker]    └─ 请求体长度:", requestBody.length, "字节")
+      }
       
       // 如果配置还未加载，尝试立即从后台获取
       if (!configLoaded) {
@@ -98,7 +101,7 @@ function setupPageBridge(): void {
       console.log("[API Mocker]    └─ 已启用规则:", interceptorConfig.rules.filter(r => r.enabled).length, "条")
       
       const matchedRule = interceptorConfig.enabled
-        ? findMatchingRule(url, method, undefined, interceptorConfig.rules)
+        ? findMatchingRule(url, method, undefined, requestBody, interceptorConfig.rules)
         : null
       
       if (matchedRule) {

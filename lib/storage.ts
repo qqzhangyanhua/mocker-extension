@@ -1,11 +1,13 @@
-﻿import type { StorageData, MockRule, MockScene, GlobalConfig, RequestRecord } from './types';
+﻿import type { StorageData, MockRule, MockScene, GlobalConfig, RequestRecord, Environment } from './types';
 
 // 榛樿閰嶇疆
 const DEFAULT_CONFIG: GlobalConfig = {
   enabled: true,
   maxRecords: 1000,
   autoClean: true,
-  interceptMode: 'page'
+  interceptMode: 'page',
+  recordingEnabled: false,
+  currentEnvironment: undefined
 };
 
 // Storage閿悕
@@ -14,6 +16,7 @@ const STORAGE_KEYS = {
   SCENES: 'mock_scenes',
   CONFIG: 'mock_config',
   RECORDS: 'mock_records',
+  ENVIRONMENTS: 'mock_environments',
 } as const;
 
 /**
@@ -172,15 +175,73 @@ export async function addRecord(record: RequestRecord): Promise<void> {
 export async function clearRecords(): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.RECORDS]: [] });
 }
+
+/**
+ * 获取所有环境变量
+ */
+export async function getEnvironments(): Promise<Environment[]> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.ENVIRONMENTS);
+  return result[STORAGE_KEYS.ENVIRONMENTS] || [];
+}
+
+/**
+ * 保存环境变量
+ */
+export async function saveEnvironments(environments: Environment[]): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.ENVIRONMENTS]: environments });
+}
+
+/**
+ * 添加环境
+ */
+export async function addEnvironment(environment: Environment): Promise<void> {
+  const environments = await getEnvironments();
+  environments.push(environment);
+  await saveEnvironments(environments);
+}
+
+/**
+ * 更新环境
+ */
+export async function updateEnvironment(id: string, updates: Partial<Environment>): Promise<void> {
+  const environments = await getEnvironments();
+  const index = environments.findIndex(e => e.id === id);
+  if (index !== -1) {
+    environments[index] = { ...environments[index], ...updates, updatedAt: Date.now() };
+    await saveEnvironments(environments);
+  }
+}
+
+/**
+ * 删除环境
+ */
+export async function deleteEnvironment(id: string): Promise<void> {
+  const environments = await getEnvironments();
+  const filtered = environments.filter(e => e.id !== id);
+  await saveEnvironments(filtered);
+}
+
+/**
+ * 获取当前激活的环境
+ */
+export async function getCurrentEnvironment(): Promise<Environment | undefined> {
+  const config = await getConfig();
+  if (!config.currentEnvironment) return undefined;
+  
+  const environments = await getEnvironments();
+  return environments.find(e => e.id === config.currentEnvironment);
+}
+
 export async function exportData(): Promise<StorageData> {
-  const [rules, scenes, config, records] = await Promise.all([
+  const [rules, scenes, config, records, environments] = await Promise.all([
     getRules(),
     getScenes(),
     getConfig(),
     getRecords(),
+    getEnvironments(),
   ]);
 
-  return { rules, scenes, config, records };
+  return { rules, scenes, config, records, environments };
 }
 
 /**
@@ -200,6 +261,10 @@ export async function importData(data: Partial<StorageData>, merge: boolean = fa
     if (data.config) {
       await updateConfig(data.config);
     }
+    if (data.environments) {
+      const existingEnvs = await getEnvironments();
+      await saveEnvironments([...existingEnvs, ...data.environments]);
+    }
   } else {
     // 瑕嗙洊妯″紡
     const updates: Record<string, unknown> = {};
@@ -207,6 +272,7 @@ export async function importData(data: Partial<StorageData>, merge: boolean = fa
     if (data.scenes) updates[STORAGE_KEYS.SCENES] = data.scenes;
     if (data.config) updates[STORAGE_KEYS.CONFIG] = data.config;
     if (data.records) updates[STORAGE_KEYS.RECORDS] = data.records;
+    if (data.environments) updates[STORAGE_KEYS.ENVIRONMENTS] = data.environments;
 
     await chrome.storage.local.set(updates);
   }

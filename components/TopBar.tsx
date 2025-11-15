@@ -3,7 +3,8 @@ import {
   DownloadOutlined,
   PlusOutlined,
   SearchOutlined,
-  UploadOutlined
+  UploadOutlined,
+  GlobalOutlined
 } from "@ant-design/icons"
 import { Button, Input, Layout, Select, Space, Upload, message } from "antd"
 
@@ -17,11 +18,12 @@ interface TopBarProps {
   onExport: () => void
   onSearch: (keyword: string) => void
   onSceneManage?: () => void
+  onEnvManage?: () => void
   interceptMode?: InterceptMode
   onInterceptModeChange?: (mode: InterceptMode) => void
 }
 
-function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage, interceptMode, onInterceptModeChange }: TopBarProps) {
+function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage, onEnvManage, interceptMode, onInterceptModeChange }: TopBarProps) {
   const handleFileUpload = (file: File) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -81,6 +83,10 @@ function TopBar({ onCreateRule, onImport, onExport, onSearch, onSceneManage, int
 
         <Button icon={<AppstoreOutlined />} onClick={onSceneManage}>
           场景管理
+        </Button>
+
+        <Button icon={<GlobalOutlined />} onClick={onEnvManage}>
+          环境变量
         </Button>
 
         <Button type="primary" icon={<PlusOutlined />} onClick={onCreateRule}>

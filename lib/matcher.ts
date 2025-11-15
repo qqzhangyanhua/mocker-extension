@@ -1,4 +1,4 @@
-import type { MockRule, MatchType, HttpMethod } from './types';
+import type { MockRule, MatchType, HttpMethod, RequestBodyMatcher } from './types';
 
 /**
  * 规范化 URL：提取路径部分用于匹配
@@ -110,10 +110,115 @@ function matchHeaders(
 }
 
 /**
+ * 判断请求体是否匹配
+ */
+function matchRequestBody(
+  requestBody: string | undefined,
+  bodyMatcher: RequestBodyMatcher | undefined
+): boolean {
+  // 如果没有配置请求体匹配，则通过
+  if (!bodyMatcher || !bodyMatcher.enabled) {
+    return true;
+  }
+
+  // 如果没有请求体，则不匹配
+  if (!requestBody) {
+    return false;
+  }
+
+  try {
+    switch (bodyMatcher.matchType) {
+      case 'none':
+        return true;
+
+      case 'json': {
+        // JSON Path 匹配
+        const jsonData = JSON.parse(requestBody);
+        const value = getJsonPathValue(jsonData, bodyMatcher.pattern);
+        
+        // 如果指定了期望值，检查是否相等
+        if (bodyMatcher.value !== undefined) {
+          return String(value) === bodyMatcher.value;
+        }
+        
+        // 否则只要路径存在就匹配
+        return value !== undefined;
+      }
+
+      case 'text': {
+        // 文本/正则匹配
+        if (bodyMatcher.pattern) {
+          try {
+            const regex = new RegExp(bodyMatcher.pattern);
+            return regex.test(requestBody);
+          } catch {
+            // 如果不是正则，则使用包含匹配
+            return requestBody.includes(bodyMatcher.pattern);
+          }
+        }
+        return true;
+      }
+
+      case 'formData': {
+        // 表单数据匹配（key=value 格式）
+        const params = new URLSearchParams(requestBody);
+        const value = params.get(bodyMatcher.pattern);
+        
+        if (bodyMatcher.value !== undefined) {
+          return value === bodyMatcher.value;
+        }
+        
+        return value !== null;
+      }
+
+      default:
+        return true;
+    }
+  } catch (error) {
+    console.error('[Matcher] Error matching request body:', error);
+    return false;
+  }
+}
+
+/**
+ * 简单的 JSON Path 获取器
+ * 支持点号分隔的路径，如 "data.user.name"
+ */
+function getJsonPathValue(obj: any, path: string): any {
+  if (!path) return obj;
+  
+  const keys = path.split('.');
+  let current = obj;
+  
+  for (const key of keys) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+    
+    // 支持数组索引，如 "items[0]"
+    const arrayMatch = key.match(/^(.+)\[(\d+)\]$/);
+    if (arrayMatch) {
+      const [, arrayKey, index] = arrayMatch;
+      current = current[arrayKey];
+      if (Array.isArray(current)) {
+        current = current[parseInt(index, 10)];
+      } else {
+        return undefined;
+      }
+    } else {
+      current = current[key];
+    }
+  }
+  
+  return current;
+}
+
+/**
  * 查找匹配的规则
  * @param url 请求URL
  * @param method 请求方法
  * @param headers 请求头
+ * @param requestBody 请求体
  * @param rules 所有规则
  * @returns 匹配的规则，按优先级排序
  */
@@ -121,6 +226,7 @@ export function findMatchingRule(
   url: string,
   method: string,
   headers?: Record<string, string>,
+  requestBody?: string,
   rules: MockRule[] = []
 ): MockRule | null {
   // 过滤出启用的规则
@@ -143,7 +249,8 @@ export function findMatchingRule(
     if (
       matchUrl(url, rule.url, rule.matchType) &&
       matchMethod(method, rule.method) &&
-      matchHeaders(headers, rule.requestHeaders)
+      matchHeaders(headers, rule.requestHeaders) &&
+      matchRequestBody(requestBody, rule.requestBodyMatch)
     ) {
       return rule;
     }
@@ -159,6 +266,7 @@ export function findAllMatchingRules(
   url: string,
   method: string,
   headers?: Record<string, string>,
+  requestBody?: string,
   rules: MockRule[] = []
 ): MockRule[] {
   const enabledRules = rules.filter(rule => rule.enabled);
@@ -167,7 +275,8 @@ export function findAllMatchingRules(
     return (
       matchUrl(url, rule.url, rule.matchType) &&
       matchMethod(method, rule.method) &&
-      matchHeaders(headers, rule.requestHeaders)
+      matchHeaders(headers, rule.requestHeaders) &&
+      matchRequestBody(requestBody, rule.requestBodyMatch)
     );
   });
 }
@@ -204,6 +313,11 @@ export function getRulePriority(rule: MockRule): number {
   };
 
   let score = matchTypeScore[rule.matchType];
+
+  // 如果有请求体匹配，增加优先级
+  if (rule.requestBodyMatch && rule.requestBodyMatch.enabled) {
+    score += 100000;
+  }
 
   // 如果有请求头匹配，增加优先级
   if (rule.requestHeaders && Object.keys(rule.requestHeaders).length > 0) {

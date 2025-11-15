@@ -21,7 +21,7 @@ function ensureListener() {
     if (currentConfig.interceptMode !== "network") return
     const url = details.url
     const method = details.method || "GET"
-    const rule = findMatchingRule(url, method, undefined, currentRules)
+    const rule = findMatchingRule(url, method, undefined, undefined, currentRules)
     if (rule) {
       const record: RequestRecord = {
         id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

@@ -241,6 +241,11 @@ function OptionsIndex() {
     loadConfig()
   }, [loadScenes, loadConfig])
 
+  // 打开环境变量管理
+  const handleEnvManage = useCallback(() => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("tabs/environments.html") })
+  }, [])
+
   // 切换拦截模式
   const handleInterceptModeChange = useCallback(async (mode: "page" | "network") => {
     try {
@@ -269,6 +274,7 @@ function OptionsIndex() {
           onExport={handleExport}
           onSearch={setSearchKeyword}
           onSceneManage={handleSceneManage}
+          onEnvManage={handleEnvManage}
           interceptMode={config.interceptMode}
           onInterceptModeChange={handleInterceptModeChange}
         />
